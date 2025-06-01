@@ -1,200 +1,201 @@
 import streamlit as st
-import joblib
 import pandas as pd
+import joblib
 import numpy as np
 import os
 
-# Path to the models directory relative to the app.py file
-MODELS_DIR = 'models'
+# --- Konfigurasi Halaman Streamlit ---
+st.set_page_config(page_title="Student Dropout Prediction", layout="wide")
 
-# Load model, scaler, columns, and scaled column names
+# --- Path File ---
+model_path = 'models/best_dropout_model.pkl'
+scaler_path = 'models/scaler.pkl'
+columns_path = 'models/columns.pkl'
+scaled_columns_path = 'models/scaled_columns_names.pkl'
+
+# --- Memuat Model dan Konfigurasi ---
 try:
-    best_model = joblib.load(os.path.join(MODELS_DIR, 'best_dropout_model.pkl'))
-    scaler = joblib.load(os.path.join(MODELS_DIR, 'scaler.pkl'))
-    model_columns = joblib.load(os.path.join(MODELS_DIR, 'columns.pkl'))
-    scaled_columns_names = joblib.load(os.path.join(MODELS_DIR, 'scaled_columns_names.pkl')) # Load the list of scaled column names
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
+    trained_columns = joblib.load(columns_path)
+    scaled_columns_names = joblib.load(scaled_columns_path)
+    st.success("Model, scaler, dan konfigurasi berhasil dimuat!")
 except FileNotFoundError as e:
-    st.error(f"Error loading model files. Make sure the '{MODELS_DIR}' directory and its contents exist alongside app.py: {e}")
+    st.error(f"File tidak ditemukan: {e.filename}")
+    st.stop()
+except Exception as e:
+    st.error(f"Error saat memuat file: {e}")
     st.stop()
 
-st.title("Prediksi Risiko Dropout Mahasiswa")
-st.write("Masukkan data mahasiswa untuk memprediksi risiko dropout.")
+# --- Mapping Kategorikal ---
+marital_status_map = {
+    'Single': 1, 'Married': 2, 'Widower': 3,
+    'Divorced': 4, 'Facto union': 5, 'Legally separated': 6
+}
+daytime_map = {'Daytime': 1, 'Evening': 0}
+gender_map = {'Male': 1, 'Female': 0}
+bool_map = {'Yes': 1, 'No': 0}
 
-# --- Input Form ---
-st.sidebar.header("Data Mahasiswa")
+# Contoh mapping, sesuaikan dengan dataset asli Anda
+course_map = {
+    'Informatics Engineering': 9119,
+    'Management': 9147,
+    'Tourism': 9254,
+    'Nursing': 9500
+}
+prev_qualification_map = {
+    'Secondary education': 1,
+    'Higher ed. - bachelor': 2,
+    'Higher ed. - master': 4
+}
+nationality_map = {'Portuguese': 1, 'Other': 0}
+mothers_qual_map = {'Secondary Education': 1, 'Higher Education': 2, 'Other': 0}
+fathers_qual_map = {'Secondary Education': 1, 'Higher Education': 2, 'Other': 0}
+mothers_occupation_map = {'Student': 1, 'Teacher': 2, 'Other': 0}
+fathers_occupation_map = {'Student': 1, 'Teacher': 2, 'Other': 0}
+application_mode_map = {
+    '1st phase - general contingent': 1,
+    '2nd phase - general contingent': 2,
+    'Other': 0
+}
 
+# --- UI Streamlit ---
+menu = st.sidebar.selectbox("Pilih Halaman", ["Prediksi Status Siswa"])
 
-marital_status_options = ['Single', 'Married', 'Widower', 'Divorced', 'Facto union', 'Legally separated']
-selected_marital_status = st.sidebar.selectbox("Marital Status", marital_status_options)
+if menu == "Prediksi Status Siswa":
+    st.title("🎯 Prediksi Status Mahasiswa")
 
-application_mode = st.sidebar.number_input("Application Mode", min_value=1, value=1) 
+    with st.form("form_prediksi"):
+        col1, col2 = st.columns(2)
+        with col1:
+            marital_status = st.selectbox("Status Pernikahan", list(marital_status_map.keys()))
+            application_mode = st.selectbox("Mode Aplikasi", list(application_mode_map.keys()))
+            daytime = st.selectbox("Waktu Kuliah", list(daytime_map.keys()))
+            gender = st.selectbox("Jenis Kelamin", list(gender_map.keys()))
+            scholarship = st.selectbox("Penerima Beasiswa", list(bool_map.keys()))
+            displaced = st.selectbox("Pindah Tempat Tinggal", list(bool_map.keys()))
+            debtor = st.selectbox("Ada Hutang Pembayaran", list(bool_map.keys()))
+            tuition_fees = st.selectbox("Pembayaran SPP Tepat Waktu", list(bool_map.keys()))
+            international = st.selectbox("Mahasiswa Internasional", list(bool_map.keys()))
+            special_needs = st.selectbox("Kebutuhan Pendidikan Khusus", list(bool_map.keys()))
+            age = st.number_input("Usia Saat Mendaftar", min_value=15, max_value=100, value=18)
 
-# Course (Numeric/Categorical)
-course = st.sidebar.number_input("Course", min_value=1, value=1) 
+        with col2:
+            course = st.selectbox("Program Studi", list(course_map.keys()))
+            prev_qual = st.selectbox("Kualifikasi Sebelumnya", list(prev_qualification_map.keys()))
+            nationality = st.selectbox("Kebangsaan", list(nationality_map.keys()))
+            mother_qual = st.selectbox("Kualifikasi Ibu", list(mothers_qual_map.keys()))
+            father_qual = st.selectbox("Kualifikasi Ayah", list(fathers_qual_map.keys()))
+            mother_job = st.selectbox("Pekerjaan Ibu", list(mothers_occupation_map.keys()))
+            father_job = st.selectbox("Pekerjaan Ayah", list(fathers_occupation_map.keys()))
+            admission_grade = st.number_input("Nilai Masuk", 0.0, 200.0, 100.0)
+            prev_qual_grade = st.number_input("Nilai Kualifikasi Sebelumnya", 0.0, 200.0, 120.0)
 
-# Previous Qualification Grade (Numeric)
-previous_qualification_grade = st.sidebar.number_input("Previous Qualification Grade", min_value=0.0, value=100.0)
-
-# Curricular Units (Numeric)
-curricular_units_1st_sem_enrolled = st.sidebar.number_input("Curricular Units 1st Sem Enrolled", min_value=0, value=5)
-curricular_units_2nd_sem_enrolled = st.sidebar.number_input("Curricular Units 2nd Sem Enrolled", min_value=0, value=5)
-curricular_units_1st_sem_approved = st.sidebar.number_input("Curricular Units 1st Sem Approved", min_value=0, value=4)
-curricular_units_2nd_sem_approved = st.sidebar.number_input("Curricular Units 2nd Sem Approved", min_value=0, value=4)
-
-curricular_units_1st_sem_grade_str = st.sidebar.text_input("Curricular Units 1st Sem Grade", value="10.0")
-curricular_units_2nd_sem_grade_str = st.sidebar.text_input("Curricular Units 2nd Sem Grade", value="10.0")
-
-
-# for Economic Indicators (Numeric)
-unemployment_rate = st.sidebar.number_input("Unemployment Rate", min_value=0.0, value=5.0)
-inflation_rate = st.sidebar.number_input("Inflation Rate", min_value=0.0, value=1.0)
-gdp = st.sidebar.number_input("GDP", min_value=0.0, value=2.0)
-
-# for Gender (Categorical/Binary) 
-gender_options = ['Male', 'Female']
-selected_gender = st.sidebar.selectbox("Gender", gender_options)
-
-# for Scholarship Holder (Categorical/Binary) 
-scholarship_holder_options = ['No', 'Yes']
-selected_scholarship_holder = st.sidebar.selectbox("Scholarship Holder", scholarship_holder_options)
-
-
-# --- Preprocess Input Data ---
-processed_input_data = {}
-for col in model_columns:
-    processed_input_data[col] = 0
-
-# Populate processed_input_data dengan nilai dari input form
-
-# 1. Handle Original Numeric/Cleaned Columns
-processed_input_data['Previous_qualification_grade'] = previous_qualification_grade
-processed_input_data['Curricular_units_1st_sem_enrolled'] = curricular_units_1st_sem_enrolled
-processed_input_data['Curricular_units_2nd_sem_enrolled'] = curricular_units_2nd_sem_enrolled
-processed_input_data['Curricular_units_1st_sem_approved'] = curricular_units_1st_sem_approved
-processed_input_data['Curricular_units_2nd_sem_approved'] = curricular_units_2nd_sem_approved
-processed_input_data['Unemployment_rate'] = unemployment_rate
-processed_input_data['Inflation_rate'] = inflation_rate
-processed_input_data['GDP'] = gdp
-
-
-try:
-    # konversi Curricular Units Grade 1st Sem
-    grade_1st_sem = pd.to_numeric(curricular_units_1st_sem_grade_str.replace('.', '').replace(',', '.'), errors='coerce')
-    if pd.isna(grade_1st_sem):
-         st.warning(f"Could not convert '{curricular_units_1st_sem_grade_str}' to number for 1st Sem Grade. Using 0.")
-         processed_input_data['Curricular_units_1st_sem_grade'] = 0 
-    else:
-         processed_input_data['Curricular_units_1st_sem_grade'] = grade_1st_sem
-
-    # konversi Curricular Units Grade 2nd Sem
-    grade_2nd_sem = pd.to_numeric(curricular_units_2nd_sem_grade_str.replace('.', '').replace(',', '.'), errors='coerce')
-    if pd.isna(grade_2nd_sem):
-         st.warning(f"Could not convert '{curricular_units_2nd_sem_grade_str}' to number for 2nd Sem Grade. Using 0.")
-         processed_input_data['Curricular_units_2nd_sem_grade'] = 0 
-    else:
-         processed_input_data['Curricular_units_2nd_sem_grade'] = grade_2nd_sem
-
-except Exception as e:
-    st.error(f"Error processing grade input: {e}")
-    processed_input_data['Curricular_units_1st_sem_grade'] = 0
-    processed_input_data['Curricular_units_2nd_sem_grade'] = 0
+        st.subheader("Data Semester 1")
+        col3, col4 = st.columns(2)
+        with col3:
+            sem1_creds = st.number_input("Kredit", 0, 60, 30, key="sem1_creds")
+            sem1_enrolled = st.number_input("Daftar", 0, 10, 6, key="sem1_enrolled")
+            sem1_eval = st.number_input("Evaluasi", 0, 10, 7, key="sem1_eval")
+            sem1_approved = st.number_input("Lulus", 0, 10, 6, key="sem1_approved")
+            sem1_grade = st.number_input("Nilai Rata-rata", 0.0, 20.0, 14.0, key="sem1_grade")
+        with col4:
+            sem1_no_eval = st.number_input("Tanpa Evaluasi", 0, 10, 0, key="sem1_no_eval")
 
 
-# 2. Handle Categorical Features (Replikasi One-Hot Encoding - drop_first=True)
-
-if selected_marital_status != 'Single':
-    ohe_col_name = f'Marital_status_{selected_marital_status}'
-    if ohe_col_name in model_columns:
-        processed_input_data[ohe_col_name] = 1
-    # else:
-    #     st.warning(f"Marital Status category '{selected_marital_status}' not found in model columns. This input might be ignored.")
-
-
-# for Gender: Assuming 'Male' was dropped
-if selected_gender == 'Female':
-     if 'Gender_1' in model_columns: 
-         processed_input_data['Gender_1'] = 1
-     else:
-        st.warning(f"Gender category 'Female' mapping (Gender_1) not found in model columns. This input might be ignored.")
-
-# for Scholarship Holder: Assuming 'No' was dropped
-if selected_scholarship_holder == 'Yes':
-    if 'Scholarship_holder_1' in model_columns: 
-         processed_input_data['Scholarship_holder_1'] = 1
-    else:
-        st.warning(f"Scholarship Holder category 'Yes' mapping (Scholarship_holder_1) not found in model columns. This input might be ignored.")
-
-# Debtor
-debtor_options = ['No', 'Yes']
-selected_debtor = st.sidebar.selectbox("Debtor", debtor_options)
-if selected_debtor == 'Yes' and 'Debtor_1' in model_columns:
-    processed_input_data['Debtor_1'] = 1
-
-# Tuition fees up to date
-tuition_options = ['No', 'Yes']
-selected_tuition = st.sidebar.selectbox("Tuition Fees Up-to-Date", tuition_options)
-if selected_tuition == 'Yes' and 'Tuition_fees_up_to_date_1' in model_columns:
-    processed_input_data['Tuition_fees_up_to_date_1'] = 1
-
-# Father's qualification
-fathers_qual = st.sidebar.number_input("Father's Qualification (kode)", min_value=1, max_value=99, value=34)
-father_ohe_col = f"Fathers_qualification_{fathers_qual}"
-if father_ohe_col in model_columns:
-    processed_input_data[father_ohe_col] = 1
-
-# Mother's occupation
-mothers_occ = st.sidebar.number_input("Mother's Occupation (kode)", min_value=1, max_value=999, value=191)
-mother_ohe_col = f"Mothers_occupation_{mothers_occ}"
-if mother_ohe_col in model_columns:
-    processed_input_data[mother_ohe_col] = 1
-
-# Course (numeric kategori)
-course = st.sidebar.number_input("Course", min_value=1, max_value=9999, value=9853)
-course_ohe_col = f"Course_{course}"
-if course_ohe_col in model_columns:
-    processed_input_data[course_ohe_col] = 1
+        st.subheader("Data Semester 2")
+        col5, col6 = st.columns(2)
+        with col5:
+            sem2_creds = st.number_input("Kredit", 0, 60, 30, key="sem2_creds")
+            sem2_enrolled = st.number_input("Daftar", 0, 10, 6, key="sem2_enrolled")
+            sem2_eval = st.number_input("Evaluasi", 0, 10, 7, key="sem2_eval")
+            sem2_approved = st.number_input("Lulus", 0, 10, 6, key="sem2_approved")
+            sem2_grade = st.number_input("Nilai Rata-rata", 0.0, 20.0, 14.0, key="sem2_grade")
+        with col6:
+            sem2_no_eval = st.number_input("Tanpa Evaluasi", 0, 10, 0, key="sem2_no_eval")
 
 
-# 3. Handle Feature Engineering 
-processed_input_data['Approval_Ratio_1st_sem'] = curricular_units_1st_sem_approved / (curricular_units_1st_sem_enrolled + 1e-6)
-processed_input_data['Approval_Ratio_2nd_sem'] = curricular_units_2nd_sem_approved / (curricular_units_2nd_sem_enrolled + 1e-6)
+        st.subheader("Faktor Eksternal")
+        col7, col8 = st.columns(2)
+        with col7:
+            unemployment = st.number_input("Tingkat Pengangguran", 0.0, 30.0, 11.1)
+        with col8:
+            inflation = st.number_input("Tingkat Inflasi", -10.0, 20.0, 4.2)
+        gdp = st.number_input("GDP", -10000.0, 30000.0, 1741.2)
 
+        submitted = st.form_submit_button("Prediksi")
 
-# Convert to DataFrame
-input_df = pd.DataFrame([processed_input_data])
+        if submitted:
+            input_data = {
+                'Marital_status': marital_status_map[marital_status],
+                'Application_mode': application_mode_map[application_mode],
+                'Course': course_map[course],
+                'Daytime_evening_attendance': daytime_map[daytime],
+                'Previous_qualification': prev_qualification_map[prev_qual],
+                'Nacionality': nationality_map[nationality],
+                'Mothers_qualification': mothers_qual_map[mother_qual],
+                'Fathers_qualification': fathers_qual_map[father_qual],
+                'Mothers_occupation': mothers_occupation_map[mother_job],
+                'Fathers_occupation': fathers_occupation_map[father_job],
+                'Educational_special_needs': bool_map[special_needs],
+                'Displaced': bool_map[displaced],
+                'Debtor': bool_map[debtor],
+                'Tuition_fees_up_to_date': bool_map[tuition_fees],
+                'Gender': gender_map[gender],
+                'Scholarship_holder': bool_map[scholarship],
+                'International': bool_map[international],
+                'Age_at_enrolment': age,
+                'Admission_grade': admission_grade,
+                'Previous_qualification_grade': prev_qual_grade,
+                'Curricular_units_1st_sem_creds': sem1_creds,
+                'Curricular_units_1st_sem_enrolled': sem1_enrolled,
+                'Curricular_units_1st_sem_evaluations': sem1_eval,
+                'Curricular_units_1st_sem_approved': sem1_approved,
+                'Curricular_units_1st_sem_grade': sem1_grade,
+                'Curricular_units_1st_sem_without_eval': sem1_no_eval,
+                'Curricular_units_2nd_sem_creds': sem2_creds,
+                'Curricular_units_2nd_sem_enrolled': sem2_enrolled,
+                'Curricular_units_2nd_sem_evaluations': sem2_eval,
+                'Curricular_units_2nd_sem_approved': sem2_approved,
+                'Curricular_units_2nd_sem_grade': sem2_grade,
+                'Curricular_units_2nd_sem_without_eval': sem2_no_eval,
+                'Unemployment_rate': unemployment,
+                'Inflation_rate': inflation,
+                'GDP': gdp,
+                'Approval_Ratio_1st_sem': sem1_approved / (sem1_enrolled + 1e-6),
+                'Approval_Ratio_2nd_sem': sem2_approved / (sem2_enrolled + 1e-6)
+            }
 
-input_df = input_df[model_columns]
+            input_df = pd.DataFrame([input_data])
 
+            categorical_cols = [
+                'Marital_status', 'Application_mode', 'Course',
+                'Daytime_evening_attendance', 'Previous_qualification',
+                'Nacionality', 'Mothers_qualification', 'Fathers_qualification',
+                'Mothers_occupation', 'Fathers_occupation'
+            ]
 
-# 4. Scale the Numeric Features 
-try:
-    cols_to_scale_in_input = [col for col in scaled_columns_names if col in input_df.columns]
-    input_df[scaled_columns_names] = scaler.transform(input_df[scaled_columns_names])
+            input_df = pd.get_dummies(input_df, columns=categorical_cols, drop_first=True)
 
-except Exception as e:
-     st.error(f"Error during scaling input data. Details: {e}")
-     st.stop()
+            # Tambahkan kolom yang hilang
+            missing_cols = set(trained_columns) - set(input_df.columns)
+            for col in missing_cols:
+                input_df[col] = 0
 
+            input_df = input_df[trained_columns]
 
-# --- Prediction ---
-if st.sidebar.button("Prediksi Risiko Dropout"):
-    try:
-        prediction = best_model.predict(input_df)
-        # Ensure predict_proba is available for the model
-        if hasattr(best_model, 'predict_proba'):
-             prediction_proba = best_model.predict_proba(input_df)[:, 1] 
-        else:
-            prediction_proba = None
-            st.warning("Model does not support probability prediction.")
+            # Scaling
+            if scaled_columns_names:
+                input_df[scaled_columns_names] = scaler.transform(input_df[scaled_columns_names])
 
-        st.subheader("Hasil Prediksi:")
-        if prediction[0] == 1:
-            st.error(f"Mahasiswa ini **BERISIKO TINGGI** untuk dropout.")
-        else:
-            st.success(f"Mahasiswa ini memiliki **RISIKO RENDAH** untuk dropout.")
+            # Prediksi
+            prediction = model.predict(input_df)[0]
+            proba = model.predict_proba(input_df)[0][1]
 
-        if prediction_proba is not None:
-            st.write(f"Probabilitas Dropout: **{prediction_proba[0]:.2f}**")
+            st.subheader("Hasil Prediksi")
+            if prediction == 1:
+                st.error(f"Prediksi: Mahasiswa ini berisiko **Dropout**")
+            else:
+                st.success(f"Prediksi: Mahasiswa ini cenderung **Lulus** atau **Masih Terdaftar**")
 
-    except Exception as e:
-        st.error(f"Terjadi error saat melakukan prediksi. Pastikan format data input sesuai dengan model: {e}")
+            st.info(f"Probabilitas Dropout: **{proba:.2f}**")
